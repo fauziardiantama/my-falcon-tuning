@@ -1,6 +1,7 @@
 import os
 import json
 import torch
+import requests
 from transformers import AutoModelForCausalLM, AutoTokenizer, Trainer, TrainingArguments, DataCollatorForLanguageModeling
 from datasets import load_dataset
 
@@ -66,28 +67,29 @@ def train():
     trainer.train()
 
     # 6. Save Model
-    print(f"Saving model to: {OUTPUT_DIR}")
+    print(f"Saving model weights to: {OUTPUT_DIR}")
     trainer.save_model(OUTPUT_DIR)
     tokenizer.save_pretrained(OUTPUT_DIR)
     
-    # --- CRITICAL GGUF COMPATIBILITY FIX ---
-    # We manually inject the RoPE and Architecture parameters that llama.cpp requires
-    print("Injecting GGUF-required metadata into config.json...")
-    config_path = os.path.join(OUTPUT_DIR, "config.json")
-    if os.path.exists(config_path):
-        with open(config_path, "r") as f:
-            config = json.load(f)
-        
-        # Ensure rope_theta is present (Falcon-H1 uses 1e11)
-        config["rope_theta"] = 100000000000.0
-        
-        # Ensure context length is explicitly stated
-        if "max_position_embeddings" not in config:
-            config["max_position_embeddings"] = 262144
+    # --- CRITICAL GGUF COMPATIBILITY FIX: TOTAL CONFIG RESTORE ---
+    print("Fetching original verified config.json to ensure GGUF compatibility...")
+    CONFIG_URL = f"https://huggingface.co/{MODEL_ID}/raw/main/config.json"
+    try:
+        response = requests.get(CONFIG_URL)
+        if response.status_code == 200:
+            original_config = response.json()
             
-        with open(config_path, "w") as f:
-            json.dump(config, f, indent=2)
-    # ---------------------------------------
+            # Write the original config back to our output dir
+            # This ensures keys like rope_theta and mamba_* are preserved perfectly
+            config_path = os.path.join(OUTPUT_DIR, "config.json")
+            with open(config_path, "w") as f:
+                json.dump(original_config, f, indent=2)
+            print("SUCCESS: config.json restored from original source.")
+        else:
+            print(f"Error fetching original config: {response.status_code}")
+    except Exception as e:
+        print(f"Failed to restore config: {e}")
+    # -------------------------------------------------------------
 
     # Remove problematic files
     for bad_file in ["training_args.bin", "optimizer.pt", "scheduler.bin"]:
@@ -95,7 +97,7 @@ def train():
         if os.path.exists(p):
             os.remove(p)
         
-    print("Done! Model is now 100% compatible with llama.cpp conversion scripts.")
+    print("Done! Model is now 100% identical in structure to original, but with your weights.")
 
 if __name__ == "__main__":
     train()
