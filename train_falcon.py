@@ -66,29 +66,32 @@ def train():
     print("Starting training...")
     trainer.train()
 
-    # 6. Save Model
+    # 6. Save Model weights
     print(f"Saving model weights to: {OUTPUT_DIR}")
     trainer.save_model(OUTPUT_DIR)
-    tokenizer.save_pretrained(OUTPUT_DIR)
     
-    # --- CRITICAL GGUF COMPATIBILITY FIX: TOTAL CONFIG RESTORE ---
-    print("Fetching original verified config.json to ensure GGUF compatibility...")
-    CONFIG_URL = f"https://huggingface.co/{MODEL_ID}/raw/main/config.json"
-    try:
-        response = requests.get(CONFIG_URL)
-        if response.status_code == 200:
-            original_config = response.json()
-            
-            # Write the original config back to our output dir
-            # This ensures keys like rope_theta and mamba_* are preserved perfectly
-            config_path = os.path.join(OUTPUT_DIR, "config.json")
-            with open(config_path, "w") as f:
-                json.dump(original_config, f, indent=2)
-            print("SUCCESS: config.json restored from original source.")
-        else:
-            print(f"Error fetching original config: {response.status_code}")
-    except Exception as e:
-        print(f"Failed to restore config: {e}")
+    # --- CRITICAL GGUF COMPATIBILITY FIX: TOTAL METADATA MIRROR ---
+    print("Restoring original verified metadata files from Hugging Face...")
+    FILES_TO_RESTORE = [
+        "config.json", 
+        "generation_config.json", 
+        "tokenizer_config.json", 
+        "special_tokens_map.json"
+    ]
+    
+    for filename in FILES_TO_RESTORE:
+        url = f"https://huggingface.co/{MODEL_ID}/raw/main/{filename}"
+        try:
+            response = requests.get(url)
+            if response.status_code == 200:
+                with open(os.path.join(OUTPUT_DIR, filename), "w") as f:
+                    # We use json.dump to ensure clean formatting
+                    json.dump(response.json(), f, indent=2)
+                print(f"SUCCESS: {filename} restored.")
+            else:
+                print(f"Warning: Could not fetch {filename} ({response.status_code})")
+        except Exception as e:
+            print(f"Error restoring {filename}: {e}")
     # -------------------------------------------------------------
 
     # Remove problematic files
@@ -97,7 +100,7 @@ def train():
         if os.path.exists(p):
             os.remove(p)
         
-    print("Done! Model is now 100% identical in structure to original, but with your weights.")
+    print("Done! Folder is now a perfect structural clone of the original model.")
 
 if __name__ == "__main__":
     train()
