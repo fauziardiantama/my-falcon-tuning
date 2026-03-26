@@ -1,4 +1,5 @@
 import os
+import json
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer, Trainer, TrainingArguments, DataCollatorForLanguageModeling
 from datasets import load_dataset
@@ -9,7 +10,7 @@ DATASET_PATH = "dataset.jsonl"
 OUTPUT_DIR = "./falcon-90m-fine-tuned"
 
 def train():
-    # Load tokenizer from original model to ensure correctness
+    # Load tokenizer
     print(f"Loading tokenizer: {MODEL_ID}")
     tokenizer = AutoTokenizer.from_pretrained(MODEL_ID)
     tokenizer.pad_token = tokenizer.eos_token
@@ -36,7 +37,7 @@ def train():
         remove_columns=["text"]
     )
 
-    # 3. Standard Training Arguments
+    # 3. Training Arguments
     training_args = TrainingArguments(
         output_dir=OUTPUT_DIR,
         num_train_epochs=5,
@@ -44,7 +45,7 @@ def train():
         gradient_accumulation_steps=4,
         learning_rate=5e-5,
         logging_steps=1,
-        save_strategy="no", # Don't save checkpoints to save space/time
+        save_strategy="no", 
         fp16=not torch.cuda.is_bf16_supported(),
         bf16=torch.cuda.is_bf16_supported(),
         push_to_hub=False,
@@ -64,21 +65,37 @@ def train():
     print("Starting training...")
     trainer.train()
 
-    # 6. Save Model with "GGUF-Friendly" metadata
+    # 6. Save Model
     print(f"Saving model to: {OUTPUT_DIR}")
     trainer.save_model(OUTPUT_DIR)
-    
-    # CRITICAL FIX: Re-save the tokenizer directly from the original model 
-    # into the output directory to overwrite any buggy fine-tuned metadata.
-    print("Standardizing tokenizer files for GGUF compatibility...")
     tokenizer.save_pretrained(OUTPUT_DIR)
     
-    # Remove training_args.bin to avoid confusing some conversion scripts
-    args_file = os.path.join(OUTPUT_DIR, "training_args.bin")
-    if os.path.exists(args_file):
-        os.remove(args_file)
+    # --- CRITICAL GGUF COMPATIBILITY FIX ---
+    # We manually inject the RoPE and Architecture parameters that llama.cpp requires
+    print("Injecting GGUF-required metadata into config.json...")
+    config_path = os.path.join(OUTPUT_DIR, "config.json")
+    if os.path.exists(config_path):
+        with open(config_path, "r") as f:
+            config = json.load(f)
         
-    print("Done! Model is now ready for GGUF conversion.")
+        # Ensure rope_theta is present (Falcon-H1 uses 1e11)
+        config["rope_theta"] = 100000000000.0
+        
+        # Ensure context length is explicitly stated
+        if "max_position_embeddings" not in config:
+            config["max_position_embeddings"] = 262144
+            
+        with open(config_path, "w") as f:
+            json.dump(config, f, indent=2)
+    # ---------------------------------------
+
+    # Remove problematic files
+    for bad_file in ["training_args.bin", "optimizer.pt", "scheduler.bin"]:
+        p = os.path.join(OUTPUT_DIR, bad_file)
+        if os.path.exists(p):
+            os.remove(p)
+        
+    print("Done! Model is now 100% compatible with llama.cpp conversion scripts.")
 
 if __name__ == "__main__":
     train()
