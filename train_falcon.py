@@ -42,8 +42,8 @@ def train():
     training_args = TrainingArguments(
         output_dir=OUTPUT_DIR,
         num_train_epochs=5,
-        per_device_train_batch_size=4,
-        gradient_accumulation_steps=4,
+        per_device_train_batch_size=32, # Naik dari 4
+        gradient_accumulation_steps=1,  # Turun dari 4
         learning_rate=5e-5,
         logging_steps=1,
         save_strategy="no", 
@@ -51,7 +51,8 @@ def train():
         bf16=torch.cuda.is_bf16_supported(),
         push_to_hub=False,
         report_to="none",
-        remove_unused_columns=False
+        remove_unused_columns=False,
+        dataloader_num_workers=4 # Paralel data loading
     )
 
     # 4. Initialize Trainer
