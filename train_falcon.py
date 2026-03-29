@@ -7,7 +7,7 @@ from datasets import load_dataset
 
 # 1. Configuration
 MODEL_ID = "tiiuae/Falcon-H1-Tiny-90M-Instruct"
-DATASET_PATH = "dataset.jsonl"
+DATASET_PATH = "dataset_rpg.jsonl"
 OUTPUT_DIR = "./falcon-90m-fine-tuned"
 
 def train():
