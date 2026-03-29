@@ -30,7 +30,23 @@ def train():
         trust_remote_code=True
     )
 
-    # 2. LoRA Configuration
+    # 2. Inspect Model Structure and Setup LoRA
+    print("Listing all module names to find target layers:")
+    all_module_names = [name for name, _ in model.named_modules()]
+    for name in all_module_names[:50]: # Print first 50 to avoid clutter
+        print(f"  {name}")
+    
+    # Dynamically find target modules
+    # Common target modules for various architectures
+    potential_targets = ["query_key_value", "q_proj", "v_proj", "k_proj", "o_proj", "c_attn"]
+    target_modules = [target for target in potential_targets if any(target in name for name in all_module_names)]
+    
+    print(f"Detected target modules for LoRA: {target_modules}")
+    
+    if not target_modules:
+        print("Warning: Could not automatically detect target modules. Falling back to query_key_value.")
+        target_modules = ["query_key_value"]
+
     print("Setting up LoRA configuration...")
     peft_config = LoraConfig(
         task_type=TaskType.CAUSAL_LM,
@@ -38,7 +54,7 @@ def train():
         r=8,
         lora_alpha=32,
         lora_dropout=0.1,
-        target_modules=["query_key_value"] # Spesifik untuk arsitektur Falcon
+        target_modules=target_modules
     )
 
     model = get_peft_model(model, peft_config)
