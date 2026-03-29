@@ -7,5 +7,4 @@ scipy
 torch
 huggingface_hub
 ninja
-causal-conv1d>=1.4.0
-mamba-ssm
+packaging
