@@ -42,8 +42,8 @@ def train():
     training_args = TrainingArguments(
         output_dir=OUTPUT_DIR,
         num_train_epochs=5,
-        per_device_train_batch_size=16, # Turun dari 32 ke 16 agar lebih ringan
-        gradient_accumulation_steps=2,  # Naik dari 1 ke 2 agar total batch tetap 32
+        per_device_train_batch_size=128, # Maksimal untuk model 90M di T4 agar GPU terpakai penuh
+        gradient_accumulation_steps=1,   # Langsung update setiap langkah karena batch sudah besar
         learning_rate=5e-5,
         logging_steps=1,
         save_strategy="no", 
@@ -52,7 +52,7 @@ def train():
         push_to_hub=False,
         report_to="none",
         remove_unused_columns=False,
-        dataloader_num_workers=2 # Sesuai saran sistem Colab (maksimal 2)
+        dataloader_num_workers=2 
     )
 
     # 4. Initialize Trainer
